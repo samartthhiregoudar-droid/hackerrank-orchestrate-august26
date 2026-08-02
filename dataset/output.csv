@@ -104,7 +104,7 @@ msg_100,notify,urgent,The message is from a work context and contains a direct d
 msg_062,mute,forward,The sender has a pattern of repeated forwards or greetings that the user usually ignores.,0.85,message_0043;message_0030
 msg_096,digest,personal,General message routed to daily digest.,0.78,none
 msg_043,mute,forward,The sender has a pattern of repeated forwards or greetings that the user usually ignores.,0.85,message_0001;message_0129
-msg_077,notify,event,A school admin sent a same-day operational update that the user is likely to need immediately.,0.9,message_0403;message_0051
+msg_077,digest,event,A school admin sent a same-day operational update that the user is likely to need immediately. (Downgraded to digest due to user DND quiet hours),0.9,message_0403;message_0051
 msg_081,digest,personal,"The sender is trusted, but the message has no urgent action or safety relevance.",0.85,message_0217
 msg_025,notify,business_update,A verified business is sending an update that matches the user's recent order history.,0.91,message_0239;message_0004
 msg_084,digest,personal,"The sender is trusted, but the message has no urgent action or safety relevance.",0.85,message_0220

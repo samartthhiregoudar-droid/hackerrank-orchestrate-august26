@@ -88,15 +88,24 @@ class MessageRouter:
             
         return None
 
-    def route_message(self, msg):
-        msg_id = str(msg['message_id'])
-        user_id = str(msg['user_id'])
-        conversation_type = str(msg.get('conversation_type', '')).strip().lower()
-        group_id = str(msg.get('group_id', '')) if pd.notna(msg.get('group_id')) else ""
-        business_id = str(msg.get('business_id', '')) if pd.notna(msg.get('business_id')) else ""
-        sender_user_id = str(msg.get('sender_user_id', '')) if pd.notna(msg.get('sender_user_id')) else ""
-        created_at = str(msg.get('created_at', ''))
-        forwarded_count = int(msg.get('forwarded_count', 0)) if pd.notna(msg.get('forwarded_count')) else 0
+    def apply_dnd_escalation(self, decision, is_dnd):
+        """
+        Dynamic DND Escalation:
+        Automatically downgrades non-critical 'notify' decisions to 'digest'
+        during a user's quiet hours (is_dnd=True). Emergency and safety alerts
+        (message_type == 'urgent') bypass DND and remain 'notify'.
+        """
+        if not decision or not is_dnd:
+            return decision
+
+        action = decision.get("action")
+        mtype = decision.get("message_type")
+
+        if action == "notify" and mtype != "urgent":
+            decision["action"] = "digest"
+            orig_reason = decision.get("reason", "")
+            decision["reason"] = f"{orig_reason} (Downgraded to digest due to user DND quiet hours)"
+        return decision
 
     def compute_confidence(self, base_score, evidence_ids, has_verification=False, is_multimodal=False, is_dnd=False, is_fallback=False):
         """
@@ -119,6 +128,14 @@ class MessageRouter:
         return round(min(max(score, 0.78), 0.95), 2)
 
     def route_message(self, msg):
+        """Main entry point: routes message through tiered evaluation and applies DND escalation."""
+        user_id = str(msg.get('user_id', ''))
+        created_at = str(msg.get('created_at', ''))
+        is_dnd = self.cs.is_dnd_time(user_id, created_at)
+        raw_decision = self._evaluate_message_routing(msg, is_dnd=is_dnd)
+        return self.apply_dnd_escalation(raw_decision, is_dnd=is_dnd)
+
+    def _evaluate_message_routing(self, msg, is_dnd=False):
         msg_id = str(msg['message_id'])
         user_id = str(msg['user_id'])
         conversation_type = str(msg.get('conversation_type', '')).strip().lower()
