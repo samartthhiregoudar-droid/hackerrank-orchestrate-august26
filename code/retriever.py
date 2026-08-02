@@ -1,33 +1,40 @@
 import os
 import re
 import pandas as pd
-from collections import Counter
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
-def tokenize(text):
-    """Simple clean tokenizer for text similarity."""
+EXTRA_STOPWORDS = {
+    'the', 'a', 'an', 'and', 'or', 'to', 'in', 'of', 'for', 'is', 'on', 'at', 'by', 'this', 'that', 'it', 
+    'you', 'your', 'we', 'our', 'be', 'are', 'pls', 'please', 'hi', 'hello', 'dear', 'http', 'https', 'www', 
+    'com', 'fwd', 'forwarded', 'image', 'ocr', 'voice', 'transcript', 'attachment'
+}
+
+def clean_text(text):
+    """Clean text for tokenizing and TF-IDF processing."""
     if not text or not isinstance(text, str):
-        return set()
-    words = re.findall(r'\w+', text.lower())
-    # remove common stop words
-    stopwords = {'the', 'a', 'an', 'and', 'or', 'to', 'in', 'of', 'for', 'is', 'on', 'at', 'by', 'this', 'that', 'it', 'you', 'your', 'we', 'our', 'be', 'are', 'pls', 'please', 'hi', 'dear'}
-    return {w for w in words if w not in stopwords and len(w) > 1}
-
-def jaccard_similarity(set1, set2):
-    if not set1 or not set2:
-        return 0.0
-    intersection = len(set1.intersection(set2))
-    union = len(set1.union(set2))
-    return intersection / union if union > 0 else 0.0
+        return ""
+    words = re.findall(r'\b[a-zA-Z0-9]+\b', text.lower())
+    filtered = [w for w in words if w not in EXTRA_STOPWORDS and len(w) > 1]
+    return " ".join(filtered)
 
 class EvidenceRetriever:
     def __init__(self, context_store):
         self.cs = context_store
         self.history_df = context_store.history_df
         self.events_df = context_store.events_df
+        
+        # Build event lookup map: message_id -> event dict
+        self.event_map = {}
+        if not self.events_df.empty:
+            for _, row in self.events_df.iterrows():
+                msg_id = str(row['message_id'])
+                self.event_map[msg_id] = row.to_dict()
 
-    def find_evidence(self, msg, msg_text, max_results=2, min_sim=0.18):
+    def find_evidence(self, msg, msg_text, max_results=2, min_sim=0.12):
         """
         Find historical evidence message IDs for an incoming message.
+        Uses TF-IDF text similarity, historical OCR/ASR, and user event boosting.
         Returns a semicolon-separated string of message_ids, or 'none'.
         """
         if self.history_df.empty:
@@ -62,23 +69,56 @@ class EvidenceRetriever:
             # Fallback to all user history if specific entity match returns empty
             candidates = u_hist
 
-        target_tokens = tokenize(msg_text)
-        if not target_tokens:
+        cleaned_target = clean_text(msg_text)
+        if not cleaned_target:
             return "none"
 
-        scored = []
+        # Prepare corpus of historical candidate texts (including full OCR/ASR)
+        candidate_rows = []
+        corpus = []
         for _, h_row in candidates.iterrows():
-            h_id = str(h_row['message_id'])
-            h_text = str(h_row.get('message_text', ''))
-            h_tokens = tokenize(h_text)
-            
-            sim = jaccard_similarity(target_tokens, h_tokens)
-            
-            # Boost if sender or media matches
-            if sender_user_id and str(h_row.get('sender_user_id', '')) == sender_user_id:
+            h_dict = h_row.to_dict()
+            h_full_text = self.cs.get_full_message_text(h_dict)
+            cleaned_h = clean_text(h_full_text)
+            if cleaned_h:
+                candidate_rows.append(h_dict)
+                corpus.append(cleaned_h)
+
+        if not corpus:
+            return "none"
+
+        # Calculate TF-IDF Cosine Similarities
+        try:
+            vectorizer = TfidfVectorizer().fit(corpus + [cleaned_target])
+            target_vec = vectorizer.transform([cleaned_target])
+            corpus_vecs = vectorizer.transform(corpus)
+            sim_matrix = cosine_similarity(target_vec, corpus_vecs)[0]
+        except Exception:
+            # Fallback if vectorizer encounters unexpected error
+            sim_matrix = [0.0] * len(corpus)
+
+        scored = []
+        for idx, h_dict in enumerate(candidate_rows):
+            h_id = str(h_dict['message_id'])
+            sim = float(sim_matrix[idx])
+
+            # Boost 1: Sender match
+            if sender_user_id and str(h_dict.get('sender_user_id', '')) == sender_user_id:
+                sim += 0.08
+
+            # Boost 2: Media type match
+            if str(h_dict.get('media_type', '')) == str(msg.get('media_type', '')) and pd.notna(msg.get('media_type')):
                 sim += 0.05
-            if str(h_row.get('media_type', '')) == str(msg.get('media_type', '')) and pd.notna(msg.get('media_type')):
-                sim += 0.03
+
+            # Boost 3: Historical User Actions (Dismissed, Muted, Reported, Replied)
+            event_info = self.event_map.get(h_id, {})
+            if event_info:
+                if int(event_info.get('muted_after_message', 0)) == 1 or int(event_info.get('message_reported', 0)) == 1:
+                    sim += 0.15
+                elif int(event_info.get('notification_dismissed', 0)) == 1:
+                    sim += 0.10
+                elif int(event_info.get('message_replied', 0)) == 1:
+                    sim += 0.10
 
             if sim >= min_sim:
                 scored.append((h_id, sim))
@@ -91,3 +131,4 @@ class EvidenceRetriever:
         top_ids = [item[0] for item in scored[:max_results]]
         
         return ";".join(top_ids)
+

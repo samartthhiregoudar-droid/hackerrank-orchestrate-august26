@@ -316,7 +316,7 @@ class MessageRouter:
                 "evidence_message_ids": evidence_ids
             }
 
-        if 'volunteer sheet' in text_lower or 'found your number' in text_lower:
+        if 'volunteer sheet' in text_lower or 'found your number' in text_lower or 'got this number' in text_lower:
             return {
                 "message_id": msg_id,
                 "action": "digest",
