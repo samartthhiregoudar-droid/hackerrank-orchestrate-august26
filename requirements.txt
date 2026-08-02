@@ -1,0 +1,16 @@
+# Core
+pandas>=2.0.0
+
+# OCR (optional — one of the two is used, fallback to the other)
+paddleocr>=2.7.0          # PaddleOCR (preferred)
+paddlepaddle>=2.5.0       # Required by PaddleOCR
+opencv-python>=4.8.0      # Used for visual photo detection fallback
+
+# ASR (optional — one of the two is used, fallback to the other)
+faster-whisper>=1.0.0     # faster-whisper (preferred, CTranslate2 backend)
+openai-whisper>=20231117  # OpenAI Whisper (fallback)
+
+# Note: Tesseract OCR v5.5 CLI must be installed separately.
+# Windows: https://github.com/UB-Mannheim/tesseract/wiki
+# macOS:   brew install tesseract
+# Linux:   sudo apt-get install tesseract-ocr
