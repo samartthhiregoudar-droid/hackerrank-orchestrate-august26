@@ -1,6 +1,7 @@
 # Core
 pandas>=2.0.0
 scikit-learn>=1.2.0
+openai>=1.0.0
 
 # OCR (optional — one of the two is used, fallback to the other)
 paddleocr>=2.7.0          # PaddleOCR (preferred)

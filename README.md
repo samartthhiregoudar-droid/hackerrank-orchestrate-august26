@@ -24,8 +24,8 @@ The code is structured modularly in the `code/` directory:
   - **ASR**: Uses `faster-whisper` or `openai-whisper` to transcribe voice notes.
   - Caches extracted text to `dataset/media_cache.json` for fast re-runs.
 - **`code/context_builder.py`**: Builds the relational context store across user preferences, group metadata, business account history, and past interaction events.
-- **`code/retriever.py`**: Finds relevant historical evidence IDs (`evidence_message_ids`) to support routing decisions.
-- **`code/router.py`**: The core rule engine handling scam/phishing detection, prompt injection defense, business domain verification, spam/forward filtering, and work/family urgency scoring.
+- **`code/retriever.py`**: Intelligent retrieval engine for finding historical evidence IDs (`evidence_message_ids`). Uses **TF-IDF Vectorization** with cosine similarity, full historical OCR/ASR text extraction, noise/stopword filtering, and user interaction event boosting (mutes, dismissals, reports, replies).
+- **`code/router.py`**: Hybrid decision engine combining deterministic safety rules (prompt injection, phishing, domain spoofing, viral forwards), an optional **OpenAI `gpt-4o-mini` LLM pass** (when `OPENAI_API_KEY` is present), and an offline heuristic fallback pipeline for strict offline submission safety.
 
 ---
 
